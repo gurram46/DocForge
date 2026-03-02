@@ -1,193 +1,80 @@
-# 🧩 DocQuest Extraction Pipeline
+# DocForge Superadmin
 
-> **Goal:** semi-automate the extraction of questions, options, answers, explanations, and diagrams from NEET/JEE-style PDFs → review → insert clean data into Neon Postgres.
+Standalone superadmin frontend and proxy server for:
 
----
+- `C:\Users\sande\backend\docquest`
+- `C:\Users\sande\pdf-brach`
 
-## ⚙️ SYSTEM OVERVIEW
+## What this is
 
-| Part | Name                                  | Owner          | Purpose                                             |
-| ---- | ------------------------------------- | -------------- | --------------------------------------------------- |
-| 1️⃣  | **Architecture + Roles + Setup**      | You (Overlord) | Define schema, structure, and plan                  |
-| 2️⃣  | **Parser Goblin**                     | Radeon guy     | Extract raw text + bounding boxes from PDFs         |
-| 3️⃣  | **Classifier**                        | Iris Xe guy    | Group text → Question, Options, Answer, Explanation |
-| 4️⃣  | **Vision Nerd**                       | Iris Xe #2     | Extract diagrams, tables, and equations with OCR    |
-| 5️⃣  | **Review Dashboard + DB Integration** | You + Me       | Human review + export + Neon DB insert              |
+This project is a separate control-plane UI. It does not replace either backend and it does not bypass their normal JWT flows.
 
----
+The browser talks only to this local server. This server then calls the two backends using dedicated admin credentials.
+For executive KPIs, it can also read directly from Postgres through `DATABASE_URL`.
 
-## 🧱 FOLDER STRUCTURE
+## Quick start
 
-```
-docquest-extractor/
-├─ data/
-│  ├─ raw_blocks.json
-│  ├─ classified_output.json
-│  ├─ question_assets.json
-│  ├─ review_state.json
-│  ├─ approved_output.json
-│  └─ images/
-│     └─ <pdf>_p<page>_<n>.png
-│
-├─ scripts/
-│  ├─ parse_pdf.py           # Part 2
-│  ├─ classify_text.py       # Part 3
-│  └─ extract_images.py      # Part 4
-│
-├─ review_dashboard/         # Part 5
-│  ├─ backend/
-│  └─ frontend/
-│
-└─ db/
-   ├─ upload_to_db.py
-   └─ .env.example
-```
+1. Copy `.env.example` to `.env`
+2. Set the login credentials plus the backend URLs and either internal admin JWT secrets, fixed JWTs, or admin tokens
+3. Optionally set `DATABASE_URL` for direct read-only KPI queries
+4. Run `npm start`
+5. Open `http://localhost:2000`
 
----
+## Login
 
-## 🧩 PARTS SUMMARY
+The app now starts with a login screen.
 
-### 🔹 **Part 2 — Parser Goblin**
+- `OWNER_LOGIN_EMAIL` / `OWNER_LOGIN_PASSWORD`: full control plane access
+- `VIEWER_LOGIN_EMAIL` / `VIEWER_LOGIN_PASSWORD`: read-only investor/stakeholder access
 
-Extracts raw lines + coordinates from PDFs.
-→ Output: `data/raw_blocks.json`
+`viewer` can see:
+- overview
+- health
+- activity
+- audit visibility
 
-```bash
-python scripts/parse_pdf.py "Book.pdf" --out data/raw_blocks.json --strip-headers --strip-footers
-```
+`owner` can also use:
+- email
+- notifications
+- user controls
+- subscription controls
+- competition actions
 
----
+## Current v1 features
 
-### 🔹 **Part 3 — Classifier**
+- overview fetch from both backends
+- direct DB-backed KPI snapshot when `DATABASE_URL` is configured
+- health fetch from both backends
+- activity panels
+- email send form
+- notification create form
+- competition create form
+- user block/unblock controls
+- subscription pause/resume/cancel controls
 
-Groups lines into structured question sets.
-→ Output: `data/classified_output.json`
+## Expected backend contract
 
-```bash
-python scripts/classify_text.py --in data/raw_blocks.json --out data/classified_output.json
-```
+This app expects both backends to expose `/admin/*` endpoints protected by a dedicated internal admin credential such as:
 
----
+- `Authorization: Bearer <internal-admin-jwt>`
+- or `X-Admin-Token`
 
-### 🔹 **Part 4 — Vision Nerd**
+Preferred setup:
 
-Extracts diagrams, tables, and equations, runs OCR, and links assets via `temp_id`.
-→ Output: `data/question_assets.json` + cropped images in `data/images/`
+- set `DOCQUEST_INTERNAL_ADMIN_JWT_SECRET`
+- set `PDFBRACH_INTERNAL_ADMIN_JWT_SECRET`
+- the app will generate short-lived signed HS256 internal admin JWTs automatically
 
-```bash
-python scripts/extract_images.py \
-  --classified data/classified_output.json \
-  --pdf-root . \
-  --imgdir data/images \
-  --out data/question_assets.json
-```
+Fallbacks:
 
----
+- provide fixed `*_INTERNAL_ADMIN_JWT`
+- or provide `*_ADMIN_TOKEN`
 
-### 🔹 **Part 5 — Review Dashboard**
+## Notes
 
-Local web app for verifying, editing, and approving extracted data.
-
-#### ▶ Backend
-
-```bash
-cd review_dashboard/backend
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-```
-
-API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
-
-#### ▶ Frontend
-
-```bash
-cd review_dashboard/frontend
-npm install
-npm run dev -- --port 5173
-```
-
-UI: [http://localhost:5173](http://localhost:5173)
-
-#### ▶ Export Approved
-
-```bash
-# From the Review UI (button) or via API:
-curl -X POST http://localhost:8000/api/export
-```
-
-→ Exports final clean file:
-`data/approved_output.json`
-
----
-
-### 🔹 **DB Upload**
-
-Imports reviewed questions to **staging schema** in Neon.
-
-1. Copy `.env.example` → `.env` and set:
-
-   ```
-   DATABASE_URL=postgresql+psycopg2://USER:PASSWORD@HOST/DB
-   DB_SCHEMA_STAGING=staging_review
-   ```
-
-2. Run:
-
-   ```bash
-   python db/upload_to_db.py
-   ```
-
-> Writes to `staging_review.questions`, `staging_review.options`, and `staging_review.explanations`.
-
----
-
-## ✅ REVIEWER CHECKLIST
-
-Before marking **Approved**:
-
-* [ ] `question_text` makes sense
-* [ ] ≥2 options exist
-* [ ] exactly 1 marked correct (if single_correct)
-* [ ] explanation non-empty if available
-* [ ] image assets match question
-* [ ] difficulty/type/topic IDs set
-* [ ] `approved=true`
-
----
-
-## 🧠 TIPS + TRICKS
-
-* Always back up `data/review_state.json` before major edits.
-* If OCR fails, upload a replacement image in the UI.
-* Keep PDFs and generated JSONs **in sync** by naming properly.
-* Avoid editing JSONs manually unless you enjoy debugging nightmares.
-
----
-
-## ⚠️ COMMON SCREWUPS
-
-| Problem                      | Cause                            | Fix                                                 |
-| ---------------------------- | -------------------------------- | --------------------------------------------------- |
-| `no questions detected`      | Parser Goblin misaligned columns | adjust `--strip-headers`/`--strip-footers`          |
-| `garbage OCR text`           | low-res image                    | increase scale in `extract_images.py` (Matrix(3,3)) |
-| `DB foreign key errors`      | missing lookup rows in Neon      | seed `difficulties`, `question_types`, etc          |
-| `UI not loading`             | wrong backend port               | set CORS + check 8000                               |
-| `approved_output.json empty` | nobody clicked approve           | go bully the team                                   |
-
----
-
-## 🧩 PIPELINE SUMMARY (1-line TL;DR)
-
-```
-PDF → raw_blocks.json → classified_output.json → question_assets.json
-→ review_state.json → approved_output.json → Neon staging schema
-```
-
----
-
-## 🧑‍💻 LICENSE / CREDITS
-
-Built by **The Overlord (You)**
-with assistance from **RoastGPT**, the sleepless sarcastic AI project manager.
-
----
+- If an endpoint is not implemented yet, the UI will show the error instead of crashing.
+- Admin tokens are kept server-side in `.env`.
+- Login credentials must be explicitly set in `.env`; they should not be hardcoded in source.
+- Current login is an in-memory session gate for local/internal use. Sessions reset when the server restarts.
+- Before production use, move the login layer to persistent auth and tighten backend role enforcement further.
+- TypeScript source lives in `src/server.ts` and `src/client/app.ts`.

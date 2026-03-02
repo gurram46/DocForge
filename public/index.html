@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DocForge Superadmin</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div id="login-shell" class="login-shell">
+      <section class="login-panel">
+        <p class="eyebrow">DocForge</p>
+        <h1>Control Access</h1>
+        <p class="muted">
+          Sign in to the control plane. Owners get operational controls. Viewers get investor-facing read-only visibility.
+        </p>
+        <form id="login-form" class="stack form-stack">
+          <label>
+            Email
+            <input name="email" type="email" autocomplete="username" required>
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" autocomplete="current-password" required>
+          </label>
+          <button type="submit">Sign In</button>
+        </form>
+        <div id="login-error" class="login-error"></div>
+        <div class="login-note">
+          <strong>Two modes</strong>
+          <div>Owner: full controls for operations.</div>
+          <div>Viewer: safe read-only metrics for investors and stakeholders.</div>
+        </div>
+      </section>
+    </div>
+
+    <div id="app-shell" class="app-shell hidden">
+      <aside class="side-panel">
+        <p class="eyebrow">DocForge</p>
+        <h1>Superadmin Control</h1>
+        <p class="muted">Unified analytics and executive controls across the student app and SaaS platform.</p>
+
+        <div class="status-card">
+          <div class="session-head">
+            <div>
+              <p class="eyebrow">Active Session</p>
+              <span id="role-badge" class="pill">Owner</span>
+            </div>
+            <button class="ghost-button small" id="logout-button" type="button">Logout</button>
+          </div>
+          <p id="session-email" class="muted"></p>
+          <p class="muted" id="role-copy">
+            Privileged operator access. Control actions are enabled for live administration.
+          </p>
+        </div>
+
+        <div class="status-card" id="backend-status"></div>
+        <button class="ghost-button" id="refresh-all" type="button">Refresh Dashboard</button>
+      </aside>
+
+      <main class="main-panel">
+        <section class="hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">Executive Console</p>
+            <h2>Built for a product operator, not a social feed.</h2>
+            <p class="muted">
+              This workspace is designed for operational clarity: service posture, business health, audit visibility, and controlled intervention.
+            </p>
+          </div>
+          <div class="kpi-grid" id="kpi-grid"></div>
+        </section>
+
+        <section class="panel-grid">
+          <section class="panel">
+            <div class="panel-head">
+              <h3>System Health</h3>
+              <button class="ghost-button small" type="button" data-action="refresh-health">Refresh</button>
+            </div>
+            <div id="health-grid" class="stack"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Recent Activity</h3>
+              <button class="ghost-button small" type="button" data-action="refresh-activity">Refresh</button>
+            </div>
+            <div id="activity-feed" class="stack"></div>
+          </section>
+        </section>
+
+        <section class="panel-grid">
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Audit Log</h3>
+              <button class="ghost-button small" type="button" data-action="refresh-audit">Refresh</button>
+            </div>
+            <div id="audit-feed" class="stack"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Platform Status</h3>
+              <span class="pill">Live backends</span>
+            </div>
+            <ul class="notes-list">
+              <li>`docquest` exposes the full v1 admin contract, including users, subscriptions, payments, tests, email, and audit log.</li>
+              <li>`pdf-brach` exposes the admin trust boundary and core overview, customer, subscription, notifications, drafts, and audit routes.</li>
+              <li>Endpoints marked `NOT_IMPLEMENTED` upstream are surfaced here as controlled operational errors.</li>
+              <li>Viewer access stays read-only. Owner access remains the only route to mutating actions.</li>
+            </ul>
+          </section>
+        </section>
+
+        <section class="panel-grid two-up owner-only">
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Send Email</h3>
+              <span class="pill">Owner only</span>
+            </div>
+            <form id="email-form" class="stack form-stack">
+              <label>Target backend<select name="target" required><option value="docquest">Student App</option><option value="pdf">SaaS Website</option></select></label>
+              <label>Subject<input name="subject" required></label>
+              <label>Body<textarea name="body" rows="4" required></textarea></label>
+              <label>Audience / notes<input name="audience" placeholder="all-users, paid-users, or a named segment"></label>
+              <button type="submit">Send Email</button>
+            </form>
+            <pre id="email-result" class="result-box"></pre>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Create Notification</h3>
+              <span class="pill">Owner only</span>
+            </div>
+            <form id="notification-form" class="stack form-stack">
+              <label>Title<input name="title" required></label>
+              <label>Body<textarea name="body" rows="4" required></textarea></label>
+              <label>Deep link<input name="deepLink"></label>
+              <label>Target<select name="target"><option value="all">All students</option><option value="ids">Specific user ids</option></select></label>
+              <label>User ids (comma-separated)<input name="userIds"></label>
+              <button type="submit">Create Notification</button>
+            </form>
+            <pre id="notification-result" class="result-box"></pre>
+          </section>
+        </section>
+
+        <section class="panel-grid two-up owner-only">
+          <section class="panel">
+            <div class="panel-head">
+              <h3>User Controls</h3>
+              <span class="pill">Owner only</span>
+            </div>
+            <div class="control-strip">
+              <button class="ghost-button small" type="button" data-action="load-users">Load Users</button>
+            </div>
+            <div id="user-list" class="stack"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Subscription Controls</h3>
+              <span class="pill">Owner only</span>
+            </div>
+            <div class="control-strip">
+              <button class="ghost-button small" type="button" data-action="load-subscriptions">Load Subscriptions</button>
+            </div>
+            <div id="subscription-list" class="stack"></div>
+          </section>
+        </section>
+
+        <section class="panel-grid two-up owner-only">
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Competitions</h3>
+              <span class="pill">Owner only</span>
+            </div>
+            <form id="competition-form" class="stack form-stack">
+              <label>Title<input name="title" required></label>
+              <label>Test ID<input name="testId" required></label>
+              <label>Starts At<input name="startsAt" type="datetime-local" required></label>
+              <label>Ends At<input name="endsAt" type="datetime-local" required></label>
+              <label>Join Deadline<input name="joinDeadline" type="datetime-local" required></label>
+              <label>Duration Minutes<input name="durationMinutes" type="number" min="1" required></label>
+              <label>Description<textarea name="description" rows="3"></textarea></label>
+              <button type="submit">Create Competition</button>
+            </form>
+            <pre id="competition-result" class="result-box"></pre>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Operating Rules</h3>
+              <span class="pill">Safety</span>
+            </div>
+            <ul class="notes-list">
+              <li>Backend secrets stay on the server. The browser never receives upstream admin tokens.</li>
+              <li>Audit visibility is available to both owners and viewers.</li>
+              <li>Privileged mutations stay gated behind the owner session and backend-side permission checks.</li>
+              <li>This UI aims for operational clarity, not social or consumer-style engagement patterns.</li>
+            </ul>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
