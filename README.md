@@ -12,6 +12,16 @@ This project is a separate control-plane UI. It does not replace either backend 
 The browser talks only to this local server. This server then calls the two backends using dedicated admin credentials.
 For executive KPIs, it can also read directly from Postgres through `DATABASE_URL`.
 
+Mobile-app override:
+- competition + notification routes can be pointed to a separate backend using `MOBILEAPP_BASE_URL`.
+
+Per-backend auth mode (env-only, no code redeploy needed):
+- `*_ADMIN_AUTH_MODE=shared_token` uses `X-Admin-Token`
+- `*_ADMIN_AUTH_MODE=internal_admin_jwt` uses generated JWT from `*_INTERNAL_ADMIN_JWT_SECRET`
+- `*_ADMIN_AUTH_MODE=static_internal_jwt` uses fixed `*_INTERNAL_ADMIN_JWT`
+- `*_ADMIN_AUTH_MODE=legacy_access_jwt` uses legacy app-style access JWT (mobile compatibility)
+- `*_ADMIN_AUTH_MODE=auto` tries secure modes first, then fallbacks
+
 ## Quick start
 
 1. Copy `.env.example` to `.env`
@@ -69,6 +79,12 @@ Fallbacks:
 
 - provide fixed `*_INTERNAL_ADMIN_JWT`
 - or provide `*_ADMIN_TOKEN`
+
+Temporary unblock mode (current):
+
+- set the same shared value in backend `INTERNAL_ADMIN_TOKEN`
+- set the same value in this app as `DOCQUEST_ADMIN_TOKEN` and `PDFBRACH_ADMIN_TOKEN`
+- leave `*_INTERNAL_ADMIN_JWT_SECRET` empty until backend JWT separation is introduced
 
 ## Notes
 

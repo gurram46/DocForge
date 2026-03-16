@@ -379,3 +379,15 @@ Choose one:
 
 Recommendation:
 Choose option 1 first, then migrate later if needed.
+
+## Auth Roadmap (Future Hardening)
+
+### Temporary mode (now, to unblock delivery)
+- Use shared internal admin token mode across systems so control-plane calls work immediately.
+- Keep this as a short-term bridge only.
+
+### Target mode (best practice, planned)
+- Use separate `INTERNAL_ADMIN_JWT_SECRET` (or JWKS) from normal `JWT_SECRET`.
+- Issue short-lived internal admin JWTs with strict claim checks (`iss`, `aud`, `exp`, `jti`, role).
+- Remove shared token fallback after migration.
+codex resume 019cad47-2fd3-70e3-be1e-0b59535155f1
