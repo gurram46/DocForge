@@ -6,7 +6,7 @@ import { createReadStream, existsSync, readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-type BackendKey = "docquest" | "pdfBrach";
+type BackendKey = "docquest" | "pdfBrach" | "mobileApp";
 type AccessRole = "owner" | "viewer";
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 type BackendResult = {
@@ -31,6 +31,32 @@ type SessionRecord = {
   role: AccessRole;
   email: string;
   createdAt: string;
+};
+
+type AdminAuthMode =
+  | "shared_token"
+  | "internal_admin_jwt"
+  | "static_internal_jwt"
+  | "legacy_access_jwt"
+  | "auto";
+
+type StandardBackendConfig = {
+  label: string;
+  baseUrl: string;
+  adminAuthMode: AdminAuthMode;
+  internalAdminJwtSecret: string;
+  internalAdminJwtAudience: string;
+  internalAdminJwt: string;
+  adminToken: string;
+};
+
+type MobileBackendConfig = StandardBackendConfig & {
+  legacyAccessJwtSecret: string;
+  legacyAccessJwtUserId: number;
+  legacyAccessJwtUsername: string;
+  legacyAccessJwtRole: string;
+  legacyAccessJwtTokenVersion: number;
+  legacyAccessJwtEmailVerified: boolean;
 };
 
 type DatabaseSnapshot = {
@@ -69,14 +95,40 @@ const config = {
     docquest: {
       label: "Student App",
       baseUrl: normalizeBaseUrl(process.env.DOCQUEST_BASE_URL),
+      adminAuthMode: (process.env.DOCQUEST_ADMIN_AUTH_MODE as AdminAuthMode) || "auto",
       internalAdminJwtSecret: process.env.DOCQUEST_INTERNAL_ADMIN_JWT_SECRET || "",
       internalAdminJwtAudience: process.env.DOCQUEST_INTERNAL_ADMIN_JWT_AUDIENCE || "docquest",
       internalAdminJwt: process.env.DOCQUEST_INTERNAL_ADMIN_JWT || "",
       adminToken: process.env.DOCQUEST_ADMIN_TOKEN || "",
     },
+    mobileApp: {
+      label: "Mobile App",
+      baseUrl: normalizeBaseUrl(process.env.MOBILEAPP_BASE_URL || process.env.MODELAPP_BASE_URL),
+      adminAuthMode: (process.env.MOBILEAPP_ADMIN_AUTH_MODE as AdminAuthMode) || "shared_token",
+      internalAdminJwtSecret:
+        process.env.MOBILEAPP_INTERNAL_ADMIN_JWT_SECRET || process.env.MODELAPP_INTERNAL_ADMIN_JWT_SECRET || process.env.DOCQUEST_INTERNAL_ADMIN_JWT_SECRET || "",
+      internalAdminJwtAudience:
+        process.env.MOBILEAPP_INTERNAL_ADMIN_JWT_AUDIENCE || process.env.MODELAPP_INTERNAL_ADMIN_JWT_AUDIENCE || "mobileapp",
+      internalAdminJwt:
+        process.env.MOBILEAPP_INTERNAL_ADMIN_JWT || process.env.MODELAPP_INTERNAL_ADMIN_JWT || "",
+      adminToken: process.env.MOBILEAPP_ADMIN_TOKEN || process.env.MODELAPP_ADMIN_TOKEN || process.env.DOCQUEST_ADMIN_TOKEN || "",
+      legacyAccessJwtSecret:
+        process.env.MOBILEAPP_ACCESS_JWT_SECRET || process.env.JWT_SECRET || "",
+      legacyAccessJwtUserId:
+        Number(process.env.MOBILEAPP_ACCESS_JWT_USER_ID || 0),
+      legacyAccessJwtUsername:
+        process.env.MOBILEAPP_ACCESS_JWT_USERNAME || "superadmin",
+      legacyAccessJwtRole:
+        process.env.MOBILEAPP_ACCESS_JWT_ROLE || "admin",
+      legacyAccessJwtTokenVersion:
+        Number(process.env.MOBILEAPP_ACCESS_JWT_TOKEN_VERSION || 0),
+      legacyAccessJwtEmailVerified:
+        (process.env.MOBILEAPP_ACCESS_JWT_IS_EMAIL_VERIFIED || "true").toLowerCase() !== "false",
+    },
     pdfBrach: {
       label: "SaaS Website",
       baseUrl: normalizeBaseUrl(process.env.PDFBRACH_BASE_URL),
+      adminAuthMode: (process.env.PDFBRACH_ADMIN_AUTH_MODE as AdminAuthMode) || "auto",
       internalAdminJwtSecret: process.env.PDFBRACH_INTERNAL_ADMIN_JWT_SECRET || "",
       internalAdminJwtAudience: process.env.PDFBRACH_INTERNAL_ADMIN_JWT_AUDIENCE || "pdf-brach",
       internalAdminJwt: process.env.PDFBRACH_INTERNAL_ADMIN_JWT || "",
@@ -84,6 +136,10 @@ const config = {
     },
   },
 };
+
+function isMobileBackendConfig(value: StandardBackendConfig | MobileBackendConfig): value is MobileBackendConfig {
+  return "legacyAccessJwtSecret" in value;
+}
 
 const sessions = new Map<string, SessionRecord>();
 
@@ -110,13 +166,13 @@ const proxyRoutes: ProxyRoute[] = [
   route("GET", "/api/docquest/payments/:id", "docquest", ({ id }) => `/admin/payments/${id}`),
   route("POST", "/api/docquest/payments/:id/refund", "docquest", ({ id }) => `/admin/payments/${id}/refund`),
   route("POST", "/api/docquest/payments/:id/reconcile", "docquest", ({ id }) => `/admin/payments/${id}/reconcile`),
-  route("GET", "/api/docquest/notifications", "docquest", () => "/admin/notifications"),
-  route("POST", "/api/docquest/notifications", "docquest", () => "/admin/notifications"),
-  route("POST", "/api/docquest/notifications/:id/cancel", "docquest", ({ id }) => `/admin/notifications/${id}/cancel`),
-  route("GET", "/api/docquest/competitions", "docquest", () => "/admin/competitions"),
-  route("POST", "/api/docquest/competitions", "docquest", () => "/admin/competitions"),
-  route("PATCH", "/api/docquest/competitions/:id", "docquest", ({ id }) => `/admin/competitions/${id}`),
-  route("POST", "/api/docquest/competitions/:id/cancel", "docquest", ({ id }) => `/admin/competitions/${id}/cancel`),
+  route("GET", "/api/docquest/notifications", "mobileApp", () => "/admin/notifications"),
+  route("POST", "/api/docquest/notifications", "mobileApp", () => "/admin/notifications"),
+  route("POST", "/api/docquest/notifications/:id/cancel", "mobileApp", ({ id }) => `/admin/notifications/${id}/cancel`),
+  route("GET", "/api/docquest/competitions", "mobileApp", () => "/admin/competitions"),
+  route("POST", "/api/docquest/competitions", "mobileApp", () => "/admin/competitions"),
+  route("PATCH", "/api/docquest/competitions/:id", "mobileApp", ({ id }) => `/admin/competitions/${id}`),
+  route("POST", "/api/docquest/competitions/:id/cancel", "mobileApp", ({ id }) => `/admin/competitions/${id}/cancel`),
   route("POST", "/api/docquest/email/send", "docquest", () => "/admin/email/send"),
   route("GET", "/api/docquest/email/history", "docquest", () => "/admin/email/history"),
   route("GET", "/api/docquest/tests", "docquest", () => "/admin/tests"),
@@ -382,8 +438,8 @@ async function handleHealth(res: ServerResponse): Promise<boolean> {
 
 async function handleActivity(res: ServerResponse): Promise<boolean> {
   const [notifications, competitions, subscriptions, customers, drafts] = await Promise.all([
-    requestBackend("docquest", "/admin/notifications"),
-    requestBackend("docquest", "/admin/competitions"),
+    requestBackend("mobileApp", "/admin/notifications"),
+    requestBackend("mobileApp", "/admin/competitions"),
     requestBackend("docquest", "/admin/subscriptions"),
     requestBackend("pdfBrach", "/admin/customers"),
     requestBackend("pdfBrach", "/admin/drafts"),
@@ -414,6 +470,18 @@ async function handleProxy(req: IncomingMessage, res: ServerResponse, requestUrl
     method: req.method || "GET",
     body: await readRequestBody(req),
   });
+  const upstreamRequestId =
+    result.ok &&
+    result.data &&
+    typeof result.data === "object" &&
+    !Array.isArray(result.data) &&
+    "meta" in result.data &&
+    result.data.meta &&
+    typeof result.data.meta === "object" &&
+    result.data.meta &&
+    "requestId" in result.data.meta
+      ? String(result.data.meta.requestId)
+      : null;
 
   return sendJson(res, result.ok ? 200 : result.statusCode || 502, {
     ok: result.ok,
@@ -423,6 +491,7 @@ async function handleProxy(req: IncomingMessage, res: ServerResponse, requestUrl
       backend: current.backendKey,
       upstreamPath,
       statusCode: result.statusCode || null,
+      upstreamRequestId,
     },
   });
 }
@@ -452,20 +521,39 @@ async function requestBackend(
 ): Promise<BackendResult> {
   const backend = config.backends[backendKey];
   if (!backend.baseUrl) {
-    return backendError("BACKEND_NOT_CONFIGURED", `${backendKey} base URL is not configured`, 500);
+    return {
+      ok: true,
+      statusCode: 200,
+      data: {
+        status: "not_configured",
+        backend: backendKey,
+      },
+    };
+  }
+
+  const hasAuth =
+    Boolean(backend.internalAdminJwt) ||
+    Boolean(backend.internalAdminJwtSecret) ||
+    Boolean(backend.adminToken) ||
+    (backendKey === "mobileApp" &&
+      isMobileBackendConfig(backend) &&
+      Boolean(backend.legacyAccessJwtSecret) &&
+      Number.isFinite(backend.legacyAccessJwtUserId) &&
+      backend.legacyAccessJwtUserId > 0);
+
+  if (!hasAuth) {
+    return {
+      ok: true,
+      statusCode: 200,
+      data: {
+        status: "missing_auth",
+        backend: backendKey,
+      },
+    };
   }
 
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (backend.internalAdminJwt) {
-    headers.Authorization = `Bearer ${backend.internalAdminJwt}`;
-  } else if (backend.internalAdminJwtSecret) {
-    headers.Authorization = `Bearer ${generateInternalAdminJwt(
-      backend.internalAdminJwtSecret,
-      backend.internalAdminJwtAudience,
-    )}`;
-  } else if (backend.adminToken) {
-    headers["X-Admin-Token"] = backend.adminToken;
-  }
+  applyAdminAuthHeaders(backendKey, backend, headers);
   if (options.body) {
     headers["Content-Type"] = "application/json";
   }
@@ -506,6 +594,87 @@ async function requestBackend(
   } catch (error) {
     return backendError("UPSTREAM_UNREACHABLE", error instanceof Error ? error.message : "Failed to reach backend", 502);
   }
+}
+
+function applyAdminAuthHeaders(
+  backendKey: BackendKey,
+  backend: StandardBackendConfig | MobileBackendConfig,
+  headers: Record<string, string>,
+): void {
+  const mode = backend.adminAuthMode;
+
+  const applySharedToken = () => {
+    if (backend.adminToken) {
+      headers["X-Admin-Token"] = backend.adminToken;
+      // Fallback for gateways that strip custom headers.
+      headers.Authorization = `Bearer ${backend.adminToken}`;
+      return true;
+    }
+    return false;
+  };
+
+  const applyStaticInternalJwt = () => {
+    if (backend.internalAdminJwt) {
+      headers.Authorization = `Bearer ${backend.internalAdminJwt}`;
+      return true;
+    }
+    return false;
+  };
+
+  const applyGeneratedInternalJwt = () => {
+    if (backend.internalAdminJwtSecret) {
+      headers.Authorization = `Bearer ${generateInternalAdminJwt(
+        backend.internalAdminJwtSecret,
+        backend.internalAdminJwtAudience,
+      )}`;
+      return true;
+    }
+    return false;
+  };
+
+  const applyLegacyAccessJwt = () => {
+    if (
+      backendKey === "mobileApp" &&
+      isMobileBackendConfig(backend) &&
+      backend.legacyAccessJwtSecret &&
+      Number.isFinite(backend.legacyAccessJwtUserId) &&
+      backend.legacyAccessJwtUserId > 0
+    ) {
+      headers.Authorization = `Bearer ${generateLegacyAccessJwt({
+        secret: backend.legacyAccessJwtSecret,
+        userId: backend.legacyAccessJwtUserId,
+        username: backend.legacyAccessJwtUsername,
+        role: backend.legacyAccessJwtRole,
+        tokenVersion: backend.legacyAccessJwtTokenVersion,
+        isEmailVerified: backend.legacyAccessJwtEmailVerified,
+      })}`;
+      return true;
+    }
+    return false;
+  };
+
+  if (mode === "shared_token") {
+    applySharedToken();
+    return;
+  }
+  if (mode === "static_internal_jwt") {
+    applyStaticInternalJwt();
+    return;
+  }
+  if (mode === "internal_admin_jwt") {
+    applyGeneratedInternalJwt();
+    return;
+  }
+  if (mode === "legacy_access_jwt") {
+    applyLegacyAccessJwt();
+    return;
+  }
+
+  // auto mode fallback order (most secure first).
+  if (applyStaticInternalJwt()) return;
+  if (applyGeneratedInternalJwt()) return;
+  if (applySharedToken()) return;
+  applyLegacyAccessJwt();
 }
 
 function backendError(code: string, message: string, statusCode: number): BackendResult {
@@ -601,6 +770,8 @@ function generateInternalAdminJwt(secret: string, audience: string): string {
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: "HS256", typ: "JWT" };
   const payload = {
+    adminId: "docforge-superadmin",
+    adminRole: "superadmin",
     sub: "docforge-superadmin",
     role: "owner",
     iss: "docforge-superadmin",
@@ -615,6 +786,33 @@ function generateInternalAdminJwt(secret: string, audience: string): string {
   const encodedPayload = toBase64Url(JSON.stringify(payload));
   const signingInput = `${encodedHeader}.${encodedPayload}`;
   const signature = createHmac("sha256", secret).update(signingInput).digest("base64url");
+  return `${signingInput}.${signature}`;
+}
+
+function generateLegacyAccessJwt(input: {
+  secret: string;
+  userId: number;
+  username: string;
+  role: string;
+  tokenVersion: number;
+  isEmailVerified: boolean;
+}): string {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: "HS256", typ: "JWT" };
+  const payload = {
+    id: input.userId,
+    username: input.username,
+    role: input.role,
+    is_email_verified: input.isEmailVerified,
+    tokenVersion: input.tokenVersion,
+    iat: now,
+    exp: now + 3600,
+  };
+
+  const encodedHeader = toBase64Url(JSON.stringify(header));
+  const encodedPayload = toBase64Url(JSON.stringify(payload));
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+  const signature = createHmac("sha256", input.secret).update(signingInput).digest("base64url");
   return `${signingInput}.${signature}`;
 }
 
@@ -637,8 +835,15 @@ function loadEnv(filePath: string): void {
       continue;
     }
     const key = trimmed.slice(0, index).trim();
-    const value = trimmed.slice(index + 1).trim();
-    if (key && !(key in process.env)) {
+    let value = trimmed.slice(index + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    const existing = process.env[key];
+    if (key && (existing === undefined || existing === "")) {
       process.env[key] = value;
     }
   }
