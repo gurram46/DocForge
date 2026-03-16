@@ -12,6 +12,10 @@ type ApiResult<T = unknown> = {
   ok: boolean;
   data?: T;
   error?: ApiError | null;
+  meta?: {
+    backend?: string;
+    [key: string]: unknown;
+  };
 };
 
 type SessionInfo = {
@@ -634,7 +638,14 @@ async function api<T = unknown>(url: string, options: { method?: string; body?: 
     });
 
     const payload = (await response.json()) as ApiResult<T>;
-    if (response.status === 401 && url !== "/api/session" && url !== "/api/login") {
+    const isLocalSession401 =
+      response.status === 401 &&
+      payload?.error?.code === "UNAUTHORIZED" &&
+      !payload?.meta?.backend &&
+      url !== "/api/session" &&
+      url !== "/api/login";
+
+    if (isLocalSession401) {
       showLogin("Your session expired. Log in again.");
     }
     return payload;

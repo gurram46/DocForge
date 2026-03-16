@@ -480,7 +480,12 @@ async function api(url, options = {}) {
             credentials: "same-origin",
         });
         const payload = (await response.json());
-        if (response.status === 401 && url !== "/api/session" && url !== "/api/login") {
+        const isLocalSession401 = response.status === 401 &&
+            payload?.error?.code === "UNAUTHORIZED" &&
+            !payload?.meta?.backend &&
+            url !== "/api/session" &&
+            url !== "/api/login";
+        if (isLocalSession401) {
             showLogin("Your session expired. Log in again.");
         }
         return payload;
